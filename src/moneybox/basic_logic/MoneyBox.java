@@ -1,4 +1,4 @@
-package moneybox;
+package moneybox.basic_logic;
 
 public class MoneyBox {
     private long balance = 0;

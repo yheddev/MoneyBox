@@ -1,4 +1,4 @@
-package moneybox;
+package moneybox.basic_logic;
 
 import java.util.HashMap;
 import java.util.Map;
