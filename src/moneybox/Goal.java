@@ -1,9 +1,15 @@
 package moneybox;
 
 public class Goal {
+    private final long id;
+    private static long nextId = 1;
     private String name;
     private long targetAmount;
     private final MoneyBox moneyBox;
+
+    public long getId() {
+        return id;
+    }
 
     public String getName() {
         return name;
@@ -18,6 +24,8 @@ public class Goal {
         this.name = name;
         AmountValidator.requirePositive(targetAmount);
         this.targetAmount = targetAmount;
+        id = nextId;
+        nextId++;
         this.moneyBox = new MoneyBox();
     }
 

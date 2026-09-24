@@ -11,6 +11,11 @@ public class MoneyBox {
 
     public void deposit(long amount){
         AmountValidator.requirePositive(amount);
+
+        if (amount > Long.MAX_VALUE - balance) {
+            throw new IllegalArgumentException("Deposit would overflow the balance.");
+        }
+
         balance += amount;
     }
 
@@ -20,10 +25,6 @@ public class MoneyBox {
             throw new IllegalArgumentException(
                     "The withdrawal amount cannot exceed the balance."
             );
-        }
-
-        if (amount > Long.MAX_VALUE - balance) {
-            throw new IllegalArgumentException("Deposit would overflow the balance.");
         }
         
         balance -= amount;
