@@ -5,75 +5,92 @@ import moneybox.basic_logic.GoalNotFoundException;
 import moneybox.basic_logic.GoalStorage;
 
 import java.util.Map;
+import java.util.Objects;
 import java.util.Scanner;
 
 public class ConsoleApplication {
     private final GoalStorage storage;
 
+    private record IdAndAmount(long id, long amount) {}
+
     public ConsoleApplication(GoalStorage storage) {
-        this.storage = storage;
+        this.storage = Objects.requireNonNull(storage, "Storage cannot be null.");
     }
 
-    public void run(){
+    public void run() {
         Scanner scanner = new Scanner(System.in);
 
-        System.out.println("Enter a command. Type exit to quit.");
+        System.out.println("Type help to see available commands. Type exit to quit.");
 
-        while (scanner.hasNextLine()){
+        while (scanner.hasNextLine()) {
             String line = scanner.nextLine().trim();
 
-            if (line.equalsIgnoreCase("exit")){
+            if (line.isEmpty()) {
+                continue;
+            }
+
+            if (line.equalsIgnoreCase("exit")) {
                 System.out.println("Program terminated.");
                 return;
             }
 
-            handleCommand(line);
+            try {
+                handleCommand(line);
+            } catch (NumberFormatException e) {
+                System.out.println("Numeric arguments must be integers within the long range.");
+            } catch (GoalNotFoundException e) {
+                System.out.println(e.getMessage());
+            } catch (IllegalArgumentException e) {
+                System.out.println("Command failed: " + e.getMessage());
+            }
         }
     }
 
     private void handleCommand(String line) {
         String[] parts = line.split("\\s+", 2);
         String command = parts[0];
+        String arguments = parts.length == 2 ? parts[1] : "";
 
-        if (command.equalsIgnoreCase("goals")) {
+        if (command.equalsIgnoreCase("help")) {
+            requireNoArguments(arguments, "help");
+            printHelp();
+        } else if (command.equalsIgnoreCase("goals")) {
+            requireNoArguments(arguments, "goals");
             printGoals();
         } else if (command.equalsIgnoreCase("create")) {
-            if (parts.length < 2) {
-                System.out.println("Format: create <name> <amount>");
-                return;
-            }
-            handleCreate(parts[1]);
-        } else if (command.equalsIgnoreCase("deposit")){
-            if (parts.length < 2){
-                System.out.println("Format: deposit <id> <amount>");
-                return;
-            }
-
-            handleDeposit(parts[1]);
-        } else if (command.equalsIgnoreCase("withdraw")){
-            if (parts.length < 2){
-                System.out.println("Format: withdraw <id> <amount>");
-                return;
-            }
-
-            handleWithdraw(parts[1]);
+            handleCreate(arguments);
+        } else if (command.equalsIgnoreCase("deposit")) {
+            handleDeposit(arguments);
+        } else if (command.equalsIgnoreCase("withdraw")) {
+            handleWithdraw(arguments);
         } else if (command.equalsIgnoreCase("target")) {
-            if (parts.length < 2){
-                System.out.println("Format: target <id> <amount>");
-                return;
-            }
-
-            handleTarget(parts[1]);
+            handleTarget(arguments);
         } else if (command.equalsIgnoreCase("rename")) {
-            if (parts.length < 2){
-                System.out.println("Format: rename <id> <name>");
-                return;
-            }
-
-            handleRename(parts[1]);
+            handleRename(arguments);
+        } else if (command.equalsIgnoreCase("exit")) {
+            throw new IllegalArgumentException("Format: exit");
         } else {
             System.out.println("Unknown command: " + command);
         }
+    }
+
+    private void requireNoArguments(String arguments, String command) {
+        if (!arguments.isEmpty()) {
+            throw new IllegalArgumentException("Format: " + command);
+        }
+    }
+
+    private void printHelp() {
+        System.out.println("""
+                help                      Show available commands
+                goals                     Show all goals
+                create <name> <amount>    Create a goal
+                deposit <id> <amount>     Deposit money
+                withdraw <id> <amount>    Withdraw money
+                target <id> <amount>      Change target amount
+                rename <id> <name>        Rename a goal
+                exit                      Quit
+                """);
     }
 
     private void printGoals() {
@@ -94,123 +111,92 @@ public class ConsoleApplication {
         }
     }
 
+    private IdAndAmount parseIdAndAmount(String arguments, String command) {
+        String[] values = arguments.trim().split("\\s+");
+
+        if (values.length != 2) {
+            throw new IllegalArgumentException(
+                    "Format: " + command + " <id> <amount>"
+            );
+        }
+
+        long id = Long.parseLong(values[0]);
+        long amount = Long.parseLong(values[1]);
+
+        return new IdAndAmount(id, amount);
+    }
+
     private void handleCreate(String arguments) {
-        int separator = arguments.lastIndexOf(" ");
+        arguments = arguments.trim();
+        int separator = arguments.lastIndexOf(' ');
 
         if (separator == -1) {
-            System.out.println("Format: create <name> <amount>");
-            return;
+            throw new IllegalArgumentException("Format: create <name> <amount>");
         }
 
         String name = arguments.substring(0, separator).trim();
         String amountText = arguments.substring(separator + 1);
+        long targetAmount = Long.parseLong(amountText);
 
-        try {
-            long targetAmount = Long.parseLong(amountText);
-            Goal goal = new Goal(name, targetAmount);
-            storage.addGoal(goal);
+        Goal goal = new Goal(name, targetAmount);
+        storage.addGoal(goal);
 
-            System.out.println("Goal created. ID: " + goal.getId());
-        } catch (NumberFormatException e) {
-            System.out.println("Amount must be an integer, you entered: " + amountText);
-        } catch (IllegalArgumentException e) {
-            System.out.println("Failed to create goal: " + e.getMessage());
-        }
+        System.out.println("Goal created. ID: " + goal.getId());
     }
 
     private void handleDeposit(String arguments) {
-        String[] values = arguments.trim().split("\\s+");
+        IdAndAmount values = parseIdAndAmount(arguments, "deposit");
+        Goal goal = storage.findGoal(values.id());
 
-        if (values.length != 2) {
-            System.out.println("Format: deposit <id> <amount>");
-            return;
-        }
+        goal.deposit(values.amount());
 
-        try {
-            long id = Long.parseLong(values[0]);
-            long amount = Long.parseLong(values[1]);
-
-            storage.findGoal(id).deposit(amount);
-            System.out.println("Goal ID: " + id);
-            System.out.println("Deposit amount: " + amount);
-        } catch (NumberFormatException e) {
-            System.out.println("ID and amount must be integers.");
-        } catch (GoalNotFoundException e) {
-            System.out.println(e.getMessage());
-        } catch (IllegalArgumentException e) {
-            System.out.println("Failed to deposit money: " + e.getMessage());
-        }
+        System.out.println(
+                "Deposited " + values.amount()
+                        + " to goal " + goal.getId()
+                        + ". Balance: " + goal.getBalance()
+        );
     }
 
     private void handleWithdraw(String arguments) {
-        String[] values = arguments.trim().split("\\s+");
+        IdAndAmount values = parseIdAndAmount(arguments, "withdraw");
+        Goal goal = storage.findGoal(values.id());
 
-        if (values.length != 2) {
-            System.out.println("Format: withdraw <id> <amount>");
-            return;
-        }
+        goal.withdraw(values.amount());
 
-        try {
-            long id = Long.parseLong(values[0]);
-            long amount = Long.parseLong(values[1]);
-
-            storage.findGoal(id).withdraw(amount);
-            System.out.println("Goal ID: " + id);
-            System.out.println("Withdrawal amount: " + amount);
-        } catch (NumberFormatException e) {
-            System.out.println("ID and amount must be integers.");
-        } catch (GoalNotFoundException e) {
-            System.out.println(e.getMessage());
-        } catch (IllegalArgumentException e) {
-            System.out.println("Failed to withdraw money: " + e.getMessage());
-        }
+        System.out.println(
+                "Withdrew " + values.amount()
+                        + " from goal " + goal.getId()
+                        + ". Balance: " + goal.getBalance()
+        );
     }
 
     private void handleTarget(String arguments) {
-        String[] values = arguments.trim().split("\\s+");
+        IdAndAmount values = parseIdAndAmount(arguments, "target");
+        Goal goal = storage.findGoal(values.id());
 
-        if (values.length != 2) {
-            System.out.println("Format: target <id> <amount>");
-            return;
-        }
+        goal.changeTargetAmount(values.amount());
 
-        try{
-            long id = Long.parseLong(values[0]);
-            long amount = Long.parseLong(values[1]);
-            storage.findGoal(id).changeTargetAmount(amount);
-            System.out.println("Target amount changed to " + amount);
-        } catch (NumberFormatException e) {
-            System.out.println("ID and amount must be integers.");
-        } catch (GoalNotFoundException e) {
-            System.out.println(e.getMessage());
-        } catch (IllegalArgumentException e) {
-            System.out.println("Failed to change target amount: " +
-                    e.getMessage());
-        }
+        System.out.println(
+                "Target amount for goal " + goal.getId()
+                        + " changed to " + goal.getTargetAmount()
+        );
     }
 
-    private void handleRename(String arguments){
+    private void handleRename(String arguments) {
         String[] values = arguments.trim().split("\\s+", 2);
 
         if (values.length != 2) {
-            System.out.println("Format: rename <id> <name>");
-            return;
+            throw new IllegalArgumentException("Format: rename <id> <name>");
         }
 
-        try {
-            long id = Long.parseLong(values[0]);
-            String name = values[1];
-            storage.findGoal(id).changeGoalName(name);
-            System.out.println("Goal " + id + " renamed to \"" + name + "\".");
-        } catch (NumberFormatException e) {
-            System.out.println("ID must be integer.");
-        } catch (GoalNotFoundException e) {
-            System.out.println(e.getMessage());
-        } catch (IllegalArgumentException e) {
-            System.out.println("Failed to rename the goal: " +
-                    e.getMessage());
-        }
+        long id = Long.parseLong(values[0]);
+        String name = values[1];
+        Goal goal = storage.findGoal(id);
 
+        goal.changeGoalName(name);
+
+        System.out.println(
+                "Goal " + goal.getId() + " renamed to \"" + goal.getName() + "\"."
+        );
     }
-
 }
